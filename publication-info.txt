@@ -1,0 +1,180 @@
+"""
+Publication info extractor for metadata like dates, authors, and summaries.
+"""
+
+import re
+
+
+class PublicationInfoExtractor:
+    """
+    Extracts publication metadata from news articles.
+    
+    This includes publication dates, update times, authors,
+    and article summaries.
+    """
+    
+    def __init__(self):
+        """Initialize with regex patterns for common publication formats"""
+        # BBC specific date pattern (e.g., "27 February 2025, 08:37 GMT")
+        self.bbc_date_pattern = r'Published\s+(\d+\s+\w+\s+\d{4},\s+[\d:]+\s+\w+)'
+        
+        # Generic date patterns
+        self.generic_date_patterns = [
+            # Format: Month Day, Year (e.g., "February 27, 2025")
+            r'(\w+\s+\d{1,2},\s+\d{4})',
+            # Format: Day Month Year (e.g., "27 February 2025")
+            r'(\d{1,2}\s+\w+\s+\d{4})',
+            # Format: YYYY-MM-DD (e.g., "2025-02-27")
+            r'(\d{4}-\d{2}-\d{2})'
+        ]
+        
+        # Update time patterns
+        self.update_patterns = [
+            # BBC format (e.g., "Updated 1 hour ago")
+            r'Updated\s+(.*?)(?=\n|$)',
+            # Generic relative time (e.g., "Updated 5 minutes ago")
+            r'Updated\s+(\d+\s+\w+\s+ago)',
+            # Absolute time update (e.g., "Updated at 14:30")
+            r'Updated\s+at\s+([\d:]+)'
+        ]
+        
+        # Author patterns
+        self.author_patterns = [
+            # Named author with title (e.g., "By John Smith, Science Correspondent")
+            r'By\s+([A-Z][a-z]+\s+[A-Z][a-z]+)(?:,\s+([^,\n]+))?',
+            # Multiple authors (e.g., "By John Smith and Jane Doe")
+            r'By\s+([A-Z][a-z]+\s+[A-Z][a-z]+\s+and\s+[A-Z][a-z]+\s+[A-Z][a-z]+)',
+            # Simple author attribution
+            r'([A-Z][a-z]+\s+[A-Z][a-z]+)\s+reports'
+        ]
+    
+    def extract(self, text, url=None):
+        """
+        Extract publication information from article text.
+        
+        Args:
+            text (str): The article text
+            url (str, optional): The article URL
+            
+        Returns:
+            dict: Publication information including date, author, and summary
+        """
+        # Initialize results dictionary
+        publication_info = {
+            "url": url or "URL not provided"
+        }
+        
+        # Extract publication date
+        date = self._extract_date(text)
+        if date:
+            publication_info["date"] = date
+            
+        # Extract update information
+        update_info = self._extract_update_info(text)
+        if update_info:
+            if "date" in publication_info:
+                publication_info["date"] += f" (Updated {update_info})"
+            else:
+                publication_info["update"] = update_info
+        
+        # Extract author information
+        author = self._extract_author(text)
+        if author:
+            publication_info["author"] = author
+        
+        # Extract summary (first substantial paragraph)
+        summary = self._extract_summary(text)
+        if summary:
+            publication_info["summary"] = summary
+        
+        return publication_info
+    
+    def _extract_date(self, text):
+        """
+        Extract publication date from text.
+        
+        Tries different date patterns, starting with source-specific ones.
+        
+        Args:
+            text (str): The article text
+            
+        Returns:
+            str: Extracted date or None if not found
+        """
+        # Try BBC-specific date pattern first
+        bbc_match = re.search(self.bbc_date_pattern, text)
+        if bbc_match:
+            return bbc_match.group(1)
+        
+        # Try generic date patterns
+        for pattern in self.generic_date_patterns:
+            match = re.search(pattern, text)
+            if match:
+                return match.group(1)
+        
+        return None
+    
+    def _extract_update_info(self, text):
+        """
+        Extract update information from text.
+        
+        Args:
+            text (str): The article text
+            
+        Returns:
+            str: Update information or None if not found
+        """
+        for pattern in self.update_patterns:
+            match = re.search(pattern, text)
+            if match:
+                return match.group(1)
+        
+        return None
+    
+    def _extract_author(self, text):
+        """
+        Extract author information from text.
+        
+        Args:
+            text (str): The article text
+            
+        Returns:
+            str: Author name or None if not found
+        """
+        for pattern in self.author_patterns:
+            match = re.search(pattern, text)
+            if match:
+                # If there's a role/title captured in group 2
+                if match.lastindex > 1 and match.group(2):
+                    return f"{match.group(1)}, {match.group(2)}"
+                return match.group(1)
+        
+        return None
+    
+    def _extract_summary(self, text):
+        """
+        Extract a summary from the article text.
+        
+        Uses the first substantial paragraph as a summary.
+        
+        Args:
+            text (str): The article text
+            
+        Returns:
+            str: Summary paragraph or None if not found
+        """
+        # Split text into paragraphs and find the first substantial one
+        paragraphs = [p.strip() for p in text.split('\n\n')]
+        
+        # Filter for paragraphs that are substantial enough to be a summary
+        substantial_paragraphs = [p for p in paragraphs if len(p) > 100 and len(p) < 500]
+        
+        if substantial_paragraphs:
+            return substantial_paragraphs[0]
+        
+        # If no substantial paragraph, use the first one that's not too short
+        for p in paragraphs:
+            if len(p) > 50:
+                return p
+        
+        return None
