@@ -15,7 +15,7 @@ A comprehensive Python library for analyzing news articles from various sources,
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/news_analyzer.git
+git clone https://github.com/osintplace/news_analyzer.git
 cd news_analyzer
 
 # Install the package
